@@ -1,3 +1,9 @@
+"""
+A Python code for 2D hydro-mechanical analysis of dike instability using the Random Finite Element Method (RFEM).
+authors: H. Cheng and W.H Pater
+emails: h.cheng@utwente.nl; w.h.pater@utwente.nl
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -12,7 +18,7 @@ from scipy.sparse import coo_matrix
 from multiprocessing import Pool
 
 
-#%% function list:
+# %% function list:
 
 # function 1: partitioning of the FEM domain
 # function 2: 8 node quadrilateral mesh generator
@@ -1256,9 +1262,9 @@ def displacement_solver_vectorized(no, nc, el, ec, df, phi, psi, coh, E, nu, Fex
 # function 51: single Monte Carlo iteration (groundwater-displacement-factor of safety)
 def monte_carlo_iteration(ks_soil, phi_soil, coh_soil, L, free, pile, inter, phi_pile, phi_inter, dilation_factor,
                           psi_pile, psi_inter, coh_pile, coh_inter, equivalent_pile_thickness, lip, active_pile,
-                          active_inter, H0, fh, fs, no, nc, el, ec, df, E, nu, Km_d, ad, lim, tol):
+                          active_inter, H0, fh, fs, no, nc, el, ec, df, E, nu, Km_d, ad, lim, tol, seed=None):
     # Generate random field instances
-    ks, phi, coh = random_field_instance(ks_soil, phi_soil, coh_soil, ec, L)
+    ks, phi, coh = random_field_instance(ks_soil, phi_soil, coh_soil, ec, L, seed)
     # Update hydraulic conductivity at integration points
     ks = hydraulic_conductivity_integration_point(free, pile, ks, equivalent_pile_thickness, lip, active_pile)
     # Update hydraulic conductivity at integration points
@@ -1285,12 +1291,12 @@ def monte_carlo_iteration(ks_soil, phi_soil, coh_soil, L, free, pile, inter, phi
 
 # function 52: parallel task Monte Carlo Iterations
 def parallel_task(i):
-    print(f"working on iteration {i + 1}")
+    print(f"working on iteration {i}")
     normal_flow_rate_add, factor_of_safety_add, U, evpt1, evpt2, evpt3, evpt4, sigma, ks, H = monte_carlo_iteration(
         ks_soil, phi_soil, coh_soil, L, free, pile, inter, phi_pile, phi_inter, dilation_factor, psi_pile, psi_inter,
         coh_pile, coh_inter, equivalent_pile_thickness, lip, active_pile, active_inter, H0, fh, fs, no, nc, el, ec, df,
-        E, nu, Km_d, ad, lim, tol)
-    return normal_flow_rate_add, factor_of_safety_add
+        E, nu, Km_d, ad, lim, tol, seed=i)
+    return normal_flow_rate_add, factor_of_safety_add, i
 
 
 # function 53: parallel execution Monte Carlo Iterations
@@ -1298,17 +1304,20 @@ def execute_parallel(mc, num_cores):
     # Create a Pool of workers to parallelize the task
     with Pool(num_cores) as pool:
         results = []
+        seeds = np.arange(1, mc + 1)
+        np.random.shuffle(seeds)
         # Submit tasks asynchronously using apply_async
-        for i in range(mc):
-            result = pool.apply_async(parallel_task, args=(i,))
+        for seed in seeds:
+            result = pool.apply_async(parallel_task, args=(seed,))
             results.append(result)
         # Retrieve results from async tasks
         results = [res.get() for res in results]
     # Extract normal_flow_rate and factor_of_safety from the results
     normal_flow_rate = np.array([result[0] for result in results])
     factor_of_safety = np.array([result[1] for result in results])
+    seeds = np.array([result[2] for result in results])
     # Return the computed normal_flow_rate and factor_of_safety
-    return normal_flow_rate, factor_of_safety
+    return normal_flow_rate, factor_of_safety, seeds
 
 
 # function 54: find safety factor by executing displacement solvers with several factors of safety
@@ -1505,7 +1514,7 @@ def display_visuals_single_run(free, wl, pile, def_scaling, equivalent_pile_thic
     plt.show()
 
 
-#%% input
+# %% input
 
 # Geometry Input
 free = np.array([
@@ -1624,7 +1633,7 @@ if __name__ == '__main__':
         end_time = time.time()
     else:
         start_time = time.time()
-        normal_flow_rate, factor_of_safety = execute_parallel(mc, num_cores)
+        normal_flow_rate, factor_of_safety, seeds = execute_parallel(mc, num_cores)
         display_Monte_Carlo(normal_flow_rate, factor_of_safety)
         end_time = time.time()
     MonteCarloSimTime = end_time - start_time
