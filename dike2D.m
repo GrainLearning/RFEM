@@ -6,7 +6,6 @@ free = [
     0.0 10.0;
     10.0 10.0;
     14.0 14.0;
-    16.0 14.0;
     18.0 14.0;
     30.0 8.0;
     50.0 8.0;
@@ -24,13 +23,13 @@ cly = 1.0;%[m]
 E_soil = 1e5;%[kPa]
 nu_soil = 0.30;%[-]
 gamma_soil = 20.0;%[kN/m3]
-phi_soil = [20.0 30.0];%[deg]
-coh_soil = [15.0 5.0];%[kPa];
-ks_soil = [0.01 0.01];%[m/d]
+phi_soil = [20.0 25.0];%[deg]
+coh_soil = [15.0 2.2];%[kPa];
+ks_soil = [0.01 0.005];%[m/d]
 dilation_factor = 0.1;%[psi/phi[-]]
 %% pile input
 activePile = false;%[true|false]
-pile = [4 6.0];%[node|depth[m]]
+pile = [3 6.0];%[node|depth[m]]
 I_pile = 5e-5;%[m4]
 E_pile = 200e6;%[kPa]
 nu_pile = 0.20;%[-]
@@ -40,15 +39,15 @@ psi_pile = 0.0;%[deg]
 coh_pile = 125e3;%[kPa]
 %% anchor input
 activeAnchor = false;%[true|false]
-anchor = [13.0 5.0 5.0];%[height y-axis[m]|base anchor x-axis[m]|base anchor y-axis[m]]
+anchor = [12.0 5.0 8.0];%[height y-axis[m]|base anchor x-axis[m]|base anchor y-axis[m]]
 E_anchor = 200e6;%[kPa]
 d_anchor = 0.15;%[m]
 HoH_anchor = 2.5;%[m]
 %% interface input
 activeInter = false;%[true|false]
-inter = [3 5 7.0];%[nr1|nr2|depth[m]]
+inter = [3 4 3.0];%[nr1|nr2|depth[m]]
 E_inter = 0.5e5;%[kPa]
-nu_inter = 0.30;%[-]
+nu_inter = 0.28;%[-]
 gamma_inter = 20.0;%[kN/m3]
 phi_inter = 18.0;%[deg]
 psi_inter = 0.0;%[deg]
@@ -58,7 +57,6 @@ lim = 500;%[-]
 tol = 1e-4;%[-]
 def_scaling = 0.05;%[-]
 mc = 1;%[-]
-%% main
 [equivalentPileThickness] = equivalentThicknessRectangle(I_pile);
 [intersectionPointList] = findIntersectionPoints(free,wl);
 [X,Y] = domainPartition(free,disc,pile,equivalentPileThickness,intersectionPointList,activePile);
@@ -77,7 +75,6 @@ mc = 1;%[-]
 [H] = initialHead(wl,X,no,el,freeSurfaceNode);
 normalFlowRate = zeros(mc,1);
 FoS = normalFlowRate;
-tic
 for i = 1:mc
     [ks,phi,coh] = randomFieldInstance(ks_soil,phi_soil,coh_soil,ec,L);
     [ks] = hydraulicConductivityIntegrationPoint(free,pile,ks,equivalentPileThickness,lip,activePile);
@@ -90,7 +87,6 @@ for i = 1:mc
     [U,evpt1,evpt2,evpt3,evpt4,sigma,FoS(i,1)] = findSafetyFactor(no,nc,el,ec,df,phi,psi,coh,E,nu,Fext,Km_d,ad,lim,tol);
     fprintf('Monte Carlo Iteration %u\n',i)
 end
-MonteCarloSimTime = toc;
 displayResults(free,wl,pile,def_scaling,equivalentPileThickness,anchorId,no,nc,el,ec,nodalWaterPressure,lip,normalFlowRate,FoS,ks,H,U,evpt1,evpt2,evpt3,evpt4,sigma,activePile);
 %% functions
 function [X,Y] = domainPartition(free,disc,pile,equivalentPileThickness,intersectionPointList,activePile)
@@ -152,7 +148,7 @@ freeSurface = cat(2,freeSurface,(freeSurface(1:end - 1) + freeSurface(2:end))/2)
 for i = 1:nx
     no(i:nx:nc,2) = freeSurface(i)*no(i:nx:nc,2);
 end
-for i = 1:nx   
+for i = 1:nx
     no(nc + ex + i:ex + nx:size(no,1),2) = freeSurface(i)*no(nc + ex + i:ex + nx:size(no,1),2);
 end
 for i = 1:ex
@@ -162,31 +158,22 @@ freeSurfaceNode = [nc - ex:nc size(no,1) - ex + 1:size(no,1)]';
 [~,idSorted] = sort(no(freeSurfaceNode,1));
 freeSurfaceNode = freeSurfaceNode(idSorted);
 end
-function [p,q,t,dp1,dp2,dp3,dp4,dJ2_1,dJ2_2,dJ2_3,dJ2_4,dJ3_1,dJ3_2,dJ3_3,dJ3_4] = stressInvariants(s1,s2,s3,s4)
-p = (s1 + s2 + s4)/3;
-d1 = (2*s1 - s2 - s4)/3;
-d2 = (2*s2 - s1 - s4)/3;
-d3 = (2*s4 - s1 - s2)/3;
-J2 = 1/2*(d1.^2 + d2.^2 + 2*s3.^2 + d3.^2);
-J2(J2 < eps) = 0.0;
-q = sqrt(3*J2);
-tp = -13.5*(d1.*d2.*d3 - d3.*s3.^2)./q.^3;
-tp(tp >= 1) = 1;
-tp(tp <= -1) = -1;
-tp(J2 < eps) = 0.0;
-t = asin(tp)/3;
-dp1 = 1.0;
-dp2 = 1.0;
-dp3 = 0.0;
-dp4 = 1.0;
-dJ2_1 = d1;
-dJ2_2 = d2;
-dJ2_3 = 2*s3;
-dJ2_4 = d3;
-dJ3_1 = d1.^2 + s3.^2 - 2/3*J2; 
-dJ3_2 = s3.^2 + d2.^2 - 2/3*J2;
-dJ3_3 = 2*(d1.*s3 + s3.*d2);
-dJ3_4 = d3.^2 - 2/3*J2;
+function [p,q,t] = stressInvariants(s1,s2,s3,s4)
+    q = zeros(size(s1));
+    t = zeros(size(s1));
+    I1 = s1 + s2 + s4;
+    I2 = s1.*s2 + s2.*s4 + s4.*s1 - s3.^2;
+    I3 = s1.*s2.*s4 - s3.^2.*s4;
+    J2 = 1/3*I1.^2 - I2;
+    J3 = 2/27*I1.^3 - 1/3*I1.*I2 + I3;
+    p = I1/3;
+    id = J2 > eps;
+    J2_id = J2(id);
+    sqrt_J2_id = sqrt(3*J2_id);
+    q(id) = sqrt_J2_id;
+    tp = -3*sqrt(3)/2*J3(id)./J2_id.^1.5;
+    tp = min(max(tp, -1.0), 1.0);
+    t(id) = asin(tp)/3;
 end
 function [lip] = integrationPointLocation(no,el,ec)
 [xi,yi] = integrationPoint();
@@ -486,13 +473,13 @@ function [id] = selectPileElements(free,pile,no,el)
     pn = find(no(:,1) == free(pile(1),1) & no(:,2) >= free(pile(1),2) - pile(2));
     id = find(ismember(el(:,1),pn));
 end
-function [snph,csph,snps,cohr,dt] = getStrengthParameter(phi,psi,coh,E,nu)
-phir = phi*pi/180.0;
-psir = psi*pi/180.0;
+function [snph,csph,snps,cohr,dt] = getShearStrengthParameters(FS,phi,psi,coh,E,nu)
+phir = atan(tan(phi*pi/180.0)/FS);
+psir = atan(tan(psi*pi/180.0)/FS);
 snph = sin(phir);
 csph = cos(phir);
 snps = sin(psir);
-cohr = coh;
+cohr = coh/FS;
 dt = (4*(1 + nu).*(1 - 2*nu))./(E.*(1 - 2*nu + snph.^2));
 end
 function [vId] = vectorDegreeFreedom(df)
@@ -590,23 +577,31 @@ else
     anchorSpringY = [];    
 end
 end
-function [F,dQ1,dQ2,dQ3,sigma] = yieldMohrCoulomb(p,q,t,snph,csph,snps,coh)
-snth = sin(t);
-csth = cos(t);
-cs3th = cos(3.0*t);
-tn3th = tan(3.0*t);
-tnth = snth./csth;
-sq3 = sqrt(3.0);
-F = p.*snph - coh.*csph + q.*(csth/sq3 - (snph.*snth)/3.0);
-F(F < 0.0) = 0.0;
-dQ1 = snps;
-dQ2 = (csth.*sq3.*(tn3th.*tnth + (snps.*sq3.*(tn3th - tnth))/3.0 + 1.0))./(2.0*q);
-dQ3 = (1.0./q.^2.*(3.0*csth.*snps/2.0 + snth*3.0*sq3/2.0))./cs3th;
-dQ2 (snth > 0.49) = (sq3/2.0 - snps(snth > 0.49)/(2.0*sq3)).*sq3./(2.0*q(snth > 0.49));
-dQ2 (snth < -0.49) = (sq3/2.0 + snps(snth < -0.49)/(2.0*sq3)).*sq3./(2.0*q(snth < -0.49));
-dQ3 (snth > 0.49) = 0.0;
-dQ3 (snth < -0.49) = 0.0;
-sigma = (-p.*snph + coh.*csph)./(csth/sq3 - (snph.*snth)/3.0);
+function [dQ1,dQ2,dQ3,dQ4] = dervativeMohrCoulomb(s1,s2,s3,s4,snps)
+s1_c = s1 + 1i*eps;
+s2_c = s2 + 1i*eps;
+s3_c = s3 + 1i*eps;
+s4_c = s4 + 1i*eps;
+[p,q,t] = stressInvariants(s1_c,s2,s3,s4);
+Q1 = p.*snps + q.*(cos(t)/sqrt(3.0) - snps.*sin(t)/3.0);
+[p,q,t] = stressInvariants(s1,s2_c,s3,s4);
+Q2 = p.*snps + q.*(cos(t)/sqrt(3.0) - snps.*sin(t)/3.0);
+[p,q,t] = stressInvariants(s1,s2,s3_c,s4);
+Q3 = p.*snps + q.*(cos(t)/sqrt(3.0) - snps.*sin(t)/3.0);
+[p,q,t] = stressInvariants(s1,s2,s3,s4_c);
+Q4 = p.*snps + q.*(cos(t)/sqrt(3.0) - snps.*sin(t)/3.0);
+dQ1 = imag(Q1)/eps;
+dQ2 = imag(Q2)/eps;
+dQ3 = imag(Q3)/eps;
+dQ4 = imag(Q4)/eps;
+end
+function [F,sigma] = yieldMohrCoulomb(s1,s2,s3,s4,snph,csph,coh)
+[p,q,t] = stressInvariants(s1,s2,s3,s4);
+a1 = p.*snph;
+a2 = coh.*csph;
+a3 = cos(t)/sqrt(3.0) - snph.*sin(t)/3.0;
+F = a1 + q.*a3 - a2;
+sigma = (a2 - a1)./a3;
 end
 function [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el,ec,df,phi,psi,coh,E,nu,Fext,Km_d,ad,lim,tol)
     CONV = true;
@@ -614,7 +609,7 @@ function [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el
     [xi,yi] = integrationPoint();
     [c1_1,c1_2,c2_1,c2_2,c3_1,c3_2,c4_1,c4_2,c5_1,c5_2,c6_1,c6_2,c7_1,c7_2,c8_1,c8_2] = coordinateArrayVectorization(no,el);
     [vId] = vectorDegreeFreedom(df);
-    [snph,csph,snps,cohr,dt] = getStrengthParameter(phi,psi,coh,E,nu);
+    [snph,csph,snps,cohr,dt] = getShearStrengthParameters(SF,phi,psi,coh,E,nu);
     [U,evpt1,evpt2,evpt3,evpt4,sigma,f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16] = arrayDeclarationVectorization(nc,ec);
     U(ad) = Km_d\Fext(ad);
     for k = 1:lim
@@ -625,12 +620,13 @@ function [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el
             [D1_1,D1_2,D1_3,D1_4,D1_5,D1_6,D1_7,D1_8,D2_1,D2_2,D2_3,D2_4,D2_5,D2_6,D2_7,D2_8,dA] = globalDerivativeVectorized(dN1_1,dN1_2,dN1_3,dN1_4,dN1_5,dN1_6,dN1_7,dN1_8,dN2_1,dN2_2,dN2_3,dN2_4,dN2_5,dN2_6,dN2_7,dN2_8,c1_1,c1_2,c2_1,c2_2,c3_1,c3_2,c4_1,c4_2,c5_1,c5_2,c6_1,c6_2,c7_1,c7_2,c8_1,c8_2);
             [e1,e2,e3,e4] = strainDisplacementVectorized(u1,u2,u3,u4,u5,u6,u7,u8,u9,u10,u11,u12,u13,u14,u15,u16,evpt1(id),evpt2(id),evpt3(id),evpt4(id),D1_1,D1_2,D1_3,D1_4,D1_5,D1_6,D1_7,D1_8,D2_1,D2_2,D2_3,D2_4,D2_5,D2_6,D2_7,D2_8);
             [s1,s2,s3,s4] = stressStrainVectorized(Lambda(id),Mu(id),e1,e2,e3,e4);
-            [p,q,t,dp1,dp2,dp3,dp4,dJ2_1,dJ2_2,dJ2_3,dJ2_4,dJ3_1,dJ3_2,dJ3_3,dJ3_4] = stressInvariants(s1,s2,s3,s4);
-            [F,dQ1,dQ2,dQ3,sigma(id)] = yieldMohrCoulomb(p,q,t,snph(id),csph(id),snps(id),cohr(id));
-            evp1 = dt(id).*F.*(dQ1.*dp1 + dQ2.*dJ2_1 + dQ3.*dJ3_1);
-            evp2 = dt(id).*F.*(dQ1.*dp2 + dQ2.*dJ2_2 + dQ3.*dJ3_2);
-            evp3 = dt(id).*F.*(dQ1.*dp3 + dQ2.*dJ2_3 + dQ3.*dJ3_3);
-            evp4 = dt(id).*F.*(dQ1.*dp4 + dQ2.*dJ2_4 + dQ3.*dJ3_4);
+            [F,sigma(id)] = yieldMohrCoulomb(s1,s2,s3,s4,snph(id),csph(id),cohr(id));
+            F(F < 0.0) = 0.0;
+            [dQ1,dQ2,dQ3,dQ4] = dervativeMohrCoulomb(s1,s2,s3,s4,snps(id));
+            evp1 = dt(id).*F.*dQ1;
+            evp2 = dt(id).*F.*dQ2;
+            evp3 = dt(id).*F.*dQ3;
+            evp4 = dt(id).*F.*dQ4;
             evpt1(id) = evpt1(id) + evp1;
             evpt2(id) = evpt2(id) + evp2;
             evpt3(id) = evpt3(id) + evp3;
@@ -651,7 +647,7 @@ function [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el
             f13 = f13 + dA.*(D1_7.*sp1 + D2_7.*sp3);
             f14 = f14 + dA.*(D1_7.*sp3 + D2_7.*sp2);
             f15 = f15 + dA.*(D1_8.*sp1 + D2_8.*sp3);
-            f16 = f16 + dA.*(D1_8.*sp3 + D2_8.*sp2);
+            f16 = f16 + dA.*(D1_8.*sp3 + D2_8.*sp2);            
         end
         Fint = accumarray(vId,[f1;f2;f3;f4;f5;f6;f7;f8;f9;f10;f11;f12;f13;f14;f15;f16;],[2*nc 1]);
         loads = Fext + Fint;
@@ -667,27 +663,25 @@ function [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el
     end
 end
 function [H] = hydraulicSolver(H,Kc,no,el,fh,fs,lim,tol)
-if sum(H) > 0.0
-    nh = (1:max(max(el(:,1:4))))';
-    afs = [];
-    ah = nh(ismember(nh,[fh;afs;]) == 0);
-    for k = 1:lim
-        Qint = Kc*H;
-        H0 = H;
-        H(ah) = H(ah) - Kc(ah,ah)\Qint(ah);
-        er = max(abs(H - H0))/max(abs(H0));
-        if er < tol
-            break
-        elseif k == lim
-            error('no conv (hydraulic phase)')
-        end
-        [Hs,fsId] = max(H(fs) - no(fs,2));
-        if Hs > 0.0
-            afs = cat(1,afs,fs(fsId));
-        end
-        H(afs) = no(afs,2);
-        ah = nh(ismember(nh,[fh;afs;]) == 0);
+nh = (1:max(max(el(:,1:4))))';
+afs = [];
+ah = nh(ismember(nh,[fh;afs;]) == 0);
+for k = 1:lim
+    Qint = Kc*H;
+    H0 = H;
+    H(ah) = H(ah) - Kc(ah,ah)\Qint(ah);
+    er = max(abs(H - H0))/max(abs(H0));
+    if er < tol
+        break
+    elseif k == lim
+        error('no conv (hydraulic phase)')
     end
+    [Hs,fsId] = max(H(fs) - no(fs,2));
+    if Hs > 0.0
+        afs = cat(1,afs,fs(fsId));
+    end
+    H(afs) = no(afs,2);
+    ah = nh(ismember(nh,[fh;afs;]) == 0);
 end
 end
 function [intersectionPoint] = crossCheck(p1,p2,p3,p4)
@@ -720,9 +714,14 @@ for i = 1:size(free,1) - 1
 end
 end
 function [U,evpt1,evpt2,evpt3,evpt4,sigma,FoS] = findSafetyFactor(no,nc,el,ec,df,phi,psi,coh,E,nu,Fext,Km_d,ad,lim,tol)
-SF = 1.0;
-[CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF,no,nc,el,ec,df,phi,psi,coh,E,nu,Fext,Km_d,ad,lim,tol);
-FoS = SF;
+SF = 0.1:0.1:5.0;
+for i = 1:numel(SF)
+    [CONV,U,evpt1,evpt2,evpt3,evpt4,sigma] = displacementSolver(SF(i),no,nc,el,ec,df,phi,psi,coh,E,nu,Fext,Km_d,ad,lim,tol);
+    if CONV == false
+        break
+    end
+end
+FoS = SF(i);
 end
 function [H] = initialHead(wl,X,no,el,freeSurfaceNode)
 fsh = interp1(wl(:,1),wl(:,2),no(freeSurfaceNode(1:2:end),1));
