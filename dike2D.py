@@ -1040,15 +1040,21 @@ def vector_degree_freedom(df):
 
 
 # function 45: get shear strength parameters
-def get_shear_strength_parameters(phi, psi, coh, E, nu):
+def get_shear_strength_parameters(FS, phi, psi, coh, E, nu):
+    # Apply strength reduction method to the strength parameters
+    phi_r = np.arctan(np.tan(np.radians(phi)) / FS)
+    # reduction dilation angle
+    psi_r = np.arctan(np.tan(np.radians(psi)) / FS)
+    # reduction cohesion
+    coh_r = coh / FS
     # recalculate Mohr-Coulomb shear strength parameters
-    snph = np.sin(np.radians(phi))
-    csph = np.cos(np.radians(phi))
-    snps = np.sin(np.radians(psi))
+    snph = np.sin(phi_r)
+    csph = np.cos(phi_r)
+    snps = np.sin(psi_r)
     # calculate critical time step
     dt = (4 * (1 + nu) * (1 - 2 * nu)) / (E * (1 - 2 * nu + snph ** 2))
     # return critical time step and shear strength parameters
-    return snph, csph, snps, coh, dt
+    return snph, csph, snps, coh_r, dt
 
 
 # function 46: vectorized version stress invariant routine
@@ -1164,7 +1170,7 @@ def select_pile_elements(free, pile, no, el):
 
 
 # function 50: solver for the displacement and stability calculation
-def displacement_solver_vectorized(no, nc, el, ec, df, phi, psi, coh, E, nu, Fext, Km_d, ad, lim, tol):
+def displacement_solver_vectorized(FS, no, nc, el, ec, df, phi, psi, coh, E, nu, Fext, Km_d, ad, lim, tol):
     CONV = True  # Variable to check convergence
     # Calculate the Lame parameters (Lambda and Mu) from elasticity modulus and Poisson's ratio
     Lambda, Mu = elasticity_parameters(E, nu)
@@ -1176,7 +1182,7 @@ def displacement_solver_vectorized(no, nc, el, ec, df, phi, psi, coh, E, nu, Fex
     # Create a vector of degrees of freedom
     vId = vector_degree_freedom(df)
     # Calculate shear strength parameters with a reduction factor equivalent to SF
-    snph, csph, snps, coh, dt = get_shear_strength_parameters(phi, psi, coh, E, nu)
+    snph, csph, snps, coh, dt = get_shear_strength_parameters(FS, phi, psi, coh, E, nu)
     # Initialize arrays for displacement, plastic strain, stress, yield function, and internal forces
     U, evpt1, evpt2, evpt3, evpt4, sigma, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16 = array_declaration_vectorization(
         nc, ec)
@@ -1322,9 +1328,16 @@ def execute_parallel(mc, num_cores):
 
 # function 54: find safety factor by executing displacement solvers with several factors of safety
 def find_safety_factor(no, nc, el, ec, df, phi, psi, coh, E, nu, Fext, Km_d, ad, lim, tol):
-    factor_of_safety = 1
-    CONV, U, evpt1, evpt2, evpt3, evpt4, sigma = displacement_solver_vectorized(no, nc, el, ec, df, phi, psi, coh,
-                                                                                E, nu, Fext, Km_d, ad, lim, tol)
+    # Loop through each safety factor in the SF array
+    for sf in np.arange(0.1, 5.1, 0.1):
+        CONV, U, evpt1, evpt2, evpt3, evpt4, sigma = displacement_solver_vectorized(sf, no, nc, el, ec, df, phi, psi, coh,
+                                                                                    E, nu, Fext, Km_d, ad, lim, tol)
+        # Check if the convergence flag is False (meaning the solver did not converge)
+        if not CONV:
+            break
+    # Determine the factor of safety that caused the solver to stop
+    factor_of_safety = sf
+    # Return the displacement, viscoplastic strain, strength parameter, and factor of safety
     return U, evpt1, evpt2, evpt3, evpt4, sigma, factor_of_safety
 
 
